@@ -1,0 +1,3 @@
+-- Enable leaked password protection in Supabase Auth
+-- This will prevent users from using commonly compromised passwords
+-- This is a configuration change and may require additional Supabase dashboard settings

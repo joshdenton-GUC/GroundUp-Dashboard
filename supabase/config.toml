@@ -1,0 +1,54 @@
+project_id = "wzlqbrglftrkxrfztcqd"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[functions.parse-resume]
+verify_jwt = false
+
+[functions.notify-client]
+verify_jwt = false
+
+[functions.test-openai]
+verify_jwt = false
+
+[functions.manage-api-keys]
+verify_jwt = true
+
+[functions.audit-log]
+verify_jwt = true
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+api_url = "http://127.0.0.1:54321"
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["https://127.0.0.1:3000"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
