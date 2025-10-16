@@ -27,7 +27,7 @@ export function getUserFriendlyErrorMessage(error: unknown): string {
   }
 
   if (
-    originalMessage.includes('OpenAI API') ||
+    originalMessage.includes('Gemini API') ||
     originalMessage.includes('authentication')
   ) {
     return 'Resume analysis service is temporarily unavailable. Please try again later.';

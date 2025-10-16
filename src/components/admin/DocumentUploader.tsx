@@ -194,7 +194,7 @@ export function DocumentUploader() {
         // Check for processing errors in the response
         if (
           candidateInfo.full_name === 'Processing Failed' ||
-          candidateInfo.full_name === 'OpenAI Disabled' ||
+          candidateInfo.full_name === 'Gemini Disabled' ||
           candidateInfo.full_name === 'Request Error' ||
           candidateInfo.full_name === 'Missing URL' ||
           candidateInfo.summary?.includes('Error:')
@@ -250,7 +250,7 @@ export function DocumentUploader() {
         if (errorMessage.includes('Could not extract readable text')) {
           errorDescription =
             'Unable to read text from PDF. The file may be image-based or corrupted. Please try uploading a text-based PDF or Word document.';
-        } else if (errorMessage.includes('OpenAI API')) {
+        } else if (errorMessage.includes('Gemini API')) {
           errorDescription =
             'Resume analysis service is temporarily unavailable. Please try again later or contact support.';
         } else if (errorMessage.includes('Failed to download PDF')) {
@@ -755,6 +755,7 @@ export function DocumentUploader() {
                     Years of Experience
                   </Label>
                   <Select
+                    disabled
                     value={formData.experience_years}
                     onValueChange={value =>
                       setFormData(prev => ({

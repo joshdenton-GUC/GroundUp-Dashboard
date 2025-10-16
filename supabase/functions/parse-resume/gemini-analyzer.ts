@@ -1,19 +1,18 @@
-// DEPRECATED: This file is no longer in use. The system now uses gemini-analyzer.ts
-// This file is kept for backup/rollback purposes only.
-// See GEMINI_MIGRATION_GUIDE.md for details.
-//
-// enhancedResumeAnalyzer.ts
+// gemini-analyzer.ts
 import { CandidateInfo } from './types.ts';
 
-// Schema used when requesting strict JSON from OpenAI Responses API
-function getOpenAIResponseSchema() {
+// Schema for Gemini JSON response
+function getGeminiResponseSchema() {
   return {
     type: 'object',
     properties: {
       full_name: { type: 'string' },
       email: { type: 'string' },
       phone: { type: 'string' },
-      skills: { type: 'array', items: { type: 'string' } },
+      skills: {
+        type: 'array',
+        items: { type: 'string' },
+      },
       experience_years: {
         type: 'string',
         enum: ['0', '2', '4', '7', '10'],
@@ -30,12 +29,14 @@ function getOpenAIResponseSchema() {
             year: { type: 'string' },
             grade: { type: 'string' },
           },
-          additionalProperties: false,
           required: ['degree', 'institution', 'year', 'grade'],
         },
       },
       summary: { type: 'string' },
-      certifications: { type: 'array', items: { type: 'string' } },
+      certifications: {
+        type: 'array',
+        items: { type: 'string' },
+      },
       experience: {
         type: 'array',
         items: {
@@ -46,7 +47,6 @@ function getOpenAIResponseSchema() {
             period: { type: 'string' },
             duration: { type: 'string' },
           },
-          additionalProperties: false,
           required: ['company', 'position', 'period', 'duration'],
         },
       },
@@ -62,156 +62,219 @@ function getOpenAIResponseSchema() {
       'certifications',
       'experience',
     ],
-    additionalProperties: false,
   };
 }
 
-// Analyze extracted text using OpenAI Chat Completion (for DOCX and non-PDF files)
-export async function analyzeResumeTextWithOpenAI(
-  extractedText: string,
-  openaiApiKey: string,
-  model: string = 'gpt-4o-mini'
+/**
+ * Analyze a PDF directly using Google Gemini File API (multimodal)
+ * Uses Gemini 1.5 Flash for cost-effective PDF analysis
+ * Uploads file to Gemini File API for efficient handling of large PDFs (up to 10MB)
+ */
+export async function analyzeResumePDFWithGemini(
+  pdfArrayBuffer: ArrayBuffer,
+  geminiApiKey: string,
+  model: string = 'gemini-2.5-flash'
 ): Promise<CandidateInfo> {
-  const processedText = preprocessPDFText(extractedText);
-  const prompt = createOpenAIPDFPrompt();
+  // Step 1: Upload PDF to Gemini File API
+  // Following official Gemini SDK pattern with simpler FormData approach
+  const uploadUrl = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${geminiApiKey}`;
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  // Create FormData with file (simpler than manual multipart construction)
+  const formData = new FormData();
+  const pdfBlob = new Blob([pdfArrayBuffer], { type: 'application/pdf' });
+  formData.append('file', pdfBlob, 'resume.pdf');
+
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'POST',
+    body: formData,
+    // Don't set Content-Type header - let browser/Deno set it with boundary
+  });
+
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text();
+    console.error('Gemini file upload error:', errorText);
+    throw new Error(
+      `Gemini file upload failed: ${uploadResponse.status} - ${errorText}`
+    );
+  }
+
+  const uploadData = await uploadResponse.json();
+  const fileUri = uploadData?.file?.uri;
+  const fileName = uploadData?.file?.name;
+  const mimeType = uploadData?.file?.mimeType || 'application/pdf';
+
+  if (!fileUri) {
+    throw new Error('No file URI returned from Gemini File API');
+  }
+
+  console.log('File uploaded to Gemini successfully');
+
+  // Step 2: Wait for file processing
+  // Files need a moment to be processed before they can be used
+  await new Promise(resolve => setTimeout(resolve, 2000));
+
+  // Step 3: Generate content using the uploaded file
+  // Following official SDK pattern with file reference
+  const prompt = createGeminiPDFPrompt();
+
+  const requestBody = {
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            fileData: {
+              mimeType: mimeType,
+              fileUri: fileUri,
+            },
+          },
+          {
+            text: prompt,
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      topK: 40,
+      topP: 0.95,
+      maxOutputTokens: 8192, // Increased for gemini-2.5-flash (uses tokens for internal reasoning)
+      responseMimeType: 'application/json',
+      responseSchema: getGeminiResponseSchema(),
+    },
+  };
+
+  // Use v1beta API for generateContent (supports file_data and JSON schema features)
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
+
+  const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${openaiApiKey}`,
     },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are an expert resume parser. Extract structured information accurately.',
-        },
-        {
-          role: 'user',
-          content: `${prompt}\n\nRESUME TEXT:\n${processedText.substring(
-            0,
-            12000
-          )}`,
-        },
-      ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'CandidateSchema',
-          schema: getOpenAIResponseSchema(),
-          strict: true,
-        },
-      },
-      temperature: 0.1,
-      max_tokens: 2048,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
-    const t = await response.text();
-    throw new Error(`OpenAI chat completion failed: ${response.status} - ${t}`);
+    const errorText = await response.text();
+    console.error('Gemini generation error:', errorText);
+    throw new Error(
+      `Gemini API request failed: ${response.status} - ${errorText}`
+    );
   }
 
   const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content ?? '';
+
+  // Check for errors or safety blocks in response
+  if (data?.promptFeedback?.blockReason) {
+    throw new Error(
+      `Gemini blocked the request: ${
+        data.promptFeedback.blockReason
+      }. Reason: ${JSON.stringify(data.promptFeedback)}`
+    );
+  }
+
+  // Extract the generated content from Gemini's response
+  // Try different possible response structures
+  let content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  // Alternative path for some API versions
+  if (!content && data?.candidates?.[0]?.output) {
+    content = data.candidates[0].output;
+  }
 
   if (!content) {
-    throw new Error('Empty response from OpenAI');
+    console.error('Empty response from Gemini API:', {
+      finishReason: data?.candidates?.[0]?.finishReason,
+      promptFeedback: data?.promptFeedback,
+    });
+    throw new Error('Empty response from Gemini API');
+  }
+
+  const parsed = safeParseJson(content);
+  const result = transformToCandidateInfo(parsed);
+
+  console.log('Successfully parsed resume:', {
+    name: result.full_name,
+    skillsCount: result.skills.length,
+    experience: result.experience_years,
+  });
+
+  return result;
+}
+
+/**
+ * Analyze extracted text using Gemini (for DOCX and non-PDF files)
+ */
+export async function analyzeResumeTextWithGemini(
+  extractedText: string,
+  geminiApiKey: string,
+  model: string = 'gemini-2.5-flash'
+): Promise<CandidateInfo> {
+  const processedText = preprocessPDFText(extractedText);
+  const prompt = createGeminiPDFPrompt();
+
+  const requestBody = {
+    contents: [
+      {
+        parts: [
+          {
+            text: `${prompt}\n\nRESUME TEXT:\n${processedText.substring(
+              0,
+              12000
+            )}`,
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      topK: 40,
+      topP: 0.95,
+      maxOutputTokens: 8192, // Increased for gemini-2.5-flash (uses tokens for internal reasoning)
+      responseMimeType: 'application/json',
+      responseSchema: getGeminiResponseSchema(),
+    },
+  };
+
+  const apiUrl = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${geminiApiKey}`;
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Gemini API request failed: ${response.status} - ${errorText}`
+    );
+  }
+
+  const data = await response.json();
+  const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!content) {
+    throw new Error('Empty response from Gemini API');
   }
 
   const parsed = safeParseJson(content);
   return transformToCandidateInfo(parsed);
 }
 
-// Analyze a PDF directly using OpenAI Files API (multimodal) and Responses API
-// Note: OpenAI Responses API only supports PDF files, not DOCX
-export async function analyzeResumePDFWithOpenAI(
-  pdfArrayBuffer: ArrayBuffer,
-  openaiApiKey: string,
-  model: string = 'gpt-4o'
-): Promise<CandidateInfo> {
-  // 1) Upload PDF as a file with purpose user_data
-  const form = new FormData();
-  form.append('purpose', 'user_data');
-  form.append(
-    'file',
-    new Blob([pdfArrayBuffer], { type: 'application/pdf' }),
-    'resume.pdf'
-  );
-
-  const uploadResp = await fetch('https://api.openai.com/v1/files', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${openaiApiKey}`,
-    },
-    body: form,
-  });
-
-  if (!uploadResp.ok) {
-    const t = await uploadResp.text();
-    throw new Error(`OpenAI file upload failed: ${uploadResp.status} - ${t}`);
+/**
+ * Convert ArrayBuffer to Base64 string
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
   }
-
-  const uploaded = await uploadResp.json();
-  const fileId = uploaded?.id;
-  if (!fileId) {
-    throw new Error('OpenAI file upload did not return a file id');
-  }
-
-  // 2) Call Responses API with the file id and JSON schema response_format
-  const prompt = createOpenAIPDFPrompt();
-
-  const responseBody = {
-    model,
-    input: [
-      {
-        role: 'user',
-        content: [
-          { type: 'input_text', text: prompt },
-          { type: 'input_file', file_id: fileId },
-        ],
-      },
-    ],
-    // Use text.format for Responses API (not top-level response_format)
-    text: {
-      format: {
-        type: 'json_schema',
-        name: 'CandidateSchema',
-        schema: getOpenAIResponseSchema(),
-        strict: true,
-      },
-    },
-  } as any;
-
-  const resp = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${openaiApiKey}`,
-    },
-    body: JSON.stringify(responseBody),
-  });
-
-  if (!resp.ok) {
-    const t = await resp.text();
-    throw new Error(`OpenAI responses failed: ${resp.status} - ${t}`);
-  }
-
-  const data = await resp.json();
-  // Try to locate the text output from the Responses API
-  const outText =
-    data?.output?.[0]?.content?.[0]?.text ?? data?.output_text ?? '';
-  if (!outText || typeof outText !== 'string') {
-    // Fallback: some responses embed JSON directly in fields
-    const raw = JSON.stringify(data);
-    return transformToCandidateInfo(safeParseJson(raw));
-  }
-
-  const parsed = safeParseJson(outText);
-  return transformToCandidateInfo(parsed);
+  return btoa(binary);
 }
 
 /**
@@ -430,7 +493,7 @@ function extractBasicContactInfo(text: string): {
   return contactInfo;
 }
 
-function createOpenAIPDFPrompt(): string {
+function createGeminiPDFPrompt(): string {
   return `You will be given a resume as input. Extract structured information with high accuracy.
 
 CRITICAL INSTRUCTIONS:
@@ -445,7 +508,10 @@ CRITICAL INSTRUCTIONS:
 2. SKILLS: Extract EVERY technical and professional skill mentioned anywhere in the document.
 3. CONTACT INFO: Extract email and phone from header/footer/body.
 4. EDUCATION: List ALL educational qualifications in order.
-5. SUMMARY: Please output the Professional Summary section as three bullet points, each summarizing one of the last 3 job experiences from the Resume. Format each bullet point starting with "• " (bullet character followed by space). If there are fewer than 3 job experiences, provide bullet points for however many are available and if there are no job experiences, provide a bullet point for the professional summary.
+5. SUMMARY: Please output the Professional Summary section as three bullet points, each summarizing one of the last 3 job experiences from the Resume. Format each bullet point starting with "• " (bullet character followed by space). If there are fewer than 3 job experiences, provide bullet points for however many are available and if there are no job experiences, provide a bullet point for the professional summary.For example,
+• Point number 1
+• Point number 2
+• Point number 3
 
 Return STRICT JSON matching the provided schema exactly.`;
 }
@@ -454,6 +520,16 @@ function safeParseJson(text: string): any {
   try {
     return JSON.parse(text);
   } catch {
+    // Try to find JSON within markdown code blocks
+    const codeBlockMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (codeBlockMatch) {
+      try {
+        return JSON.parse(codeBlockMatch[1]);
+      } catch {
+        // Continue to next attempt
+      }
+    }
+
     // Attempt to recover by trimming to first/last braces
     const first = text.indexOf('{');
     const last = text.lastIndexOf('}');
@@ -461,9 +537,10 @@ function safeParseJson(text: string): any {
       try {
         return JSON.parse(text.slice(first, last + 1));
       } catch {
-        // ignore
+        console.error('Failed to parse JSON from response');
       }
     }
+
     return {};
   }
 }

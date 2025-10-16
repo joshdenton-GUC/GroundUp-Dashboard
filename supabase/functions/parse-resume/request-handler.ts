@@ -1,5 +1,5 @@
 import { extractTextFromDocument } from './text-extractor.ts';
-import { analyzeResumePDFWithOpenAI } from './openai-analyzer.ts';
+import { analyzeResumePDFWithGemini } from './gemini-analyzer.ts';
 import {
   validateExtractedText,
   getUserFriendlyErrorMessage,
@@ -17,12 +17,12 @@ export async function handleResumeParseRequest(
   try {
     console.log('Parse resume function called');
 
-    // Get OpenAI API key
-    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-    console.log('OpenAI API key available:', !!openAIApiKey);
+    // Get Gemini API key
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    console.log('Gemini API key available:', !!geminiApiKey);
 
-    if (!openAIApiKey) {
-      throw new Error('OpenAI API key is required for resume parsing');
+    if (!geminiApiKey) {
+      throw new Error('Gemini API key is required for resume parsing');
     }
 
     // Parse request body
@@ -96,7 +96,8 @@ export async function handleResumeParseRequest(
       console.warn('Warning: No clear name pattern detected');
     }
 
-    // Use OpenAI Files API (multimodal) for PDF analysis with gpt-4o
+    // Use Gemini File API for efficient PDF analysis with Gemini 1.5 Flash
+    // Supports files up to 10MB
     // Only PDF files are supported for now
     if (fileType !== 'pdf') {
       throw new Error(
@@ -104,11 +105,13 @@ export async function handleResumeParseRequest(
       );
     }
 
-    console.log('Using OpenAI Files API (multimodal) for PDF with gpt-4o');
-    const candidateInfo = await analyzeResumePDFWithOpenAI(
+    console.log(
+      'Using Gemini File API for PDF with gemini-2.5-flash (supports up to 10MB)'
+    );
+    const candidateInfo = await analyzeResumePDFWithGemini(
       documentArrayBuffer,
-      openAIApiKey,
-      'gpt-4o'
+      geminiApiKey,
+      'gemini-2.5-flash'
     );
 
     console.log('Successfully analyzed resume:', candidateInfo);

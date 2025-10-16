@@ -1,6 +1,6 @@
 # Resume Parser Function
 
-This Supabase Edge Function parses resume documents (PDF and DOCX) and extracts structured candidate information using OpenAI's API.
+This Supabase Edge Function parses resume documents (PDF and DOCX) and extracts structured candidate information using Google Gemini's API.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ The function is organized into modular components for better maintainability:
 
 ### Analysis & Error Handling
 
-- **`openai-analyzer.ts`** - Analyzes extracted text using OpenAI API
+- **`gemini-analyzer.ts`** - Analyzes extracted text using Google Gemini API
 - **`error-handler.ts`** - Centralized error handling with user-friendly messages
 - **`constants.ts`** - Configuration constants and settings
 
@@ -66,7 +66,7 @@ The function is organized into modular components for better maintainability:
 
 ## Environment Variables
 
-- `OPENAI_API_KEY` or `ADMIN_OPENAI_API_KEY` - OpenAI API key for text analysis
+- `GEMINI_API_KEY` or `ADMIN_GEMINI_API_KEY` - Google Gemini API key for text analysis
 
 ## Supported File Types
 
@@ -79,7 +79,7 @@ The function provides comprehensive error handling with user-friendly messages f
 
 - Invalid file formats
 - Network errors
-- OpenAI API issues
+- Gemini API issues
 - Text extraction failures
 - Rate limiting
 
@@ -90,5 +90,5 @@ The modular structure makes it easy to:
 - Test individual components
 - Add new file format support
 - Modify text extraction algorithms
-- Update OpenAI integration
+- Update Gemini integration
 - Enhance error handling
