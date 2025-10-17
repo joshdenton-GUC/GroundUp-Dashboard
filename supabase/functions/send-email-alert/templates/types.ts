@@ -41,6 +41,7 @@ export interface JobStatusUpdateData {
   jobTitle: string;
   jobStatus: string;
   candidateName?: string;
+  candidateLocation?: string;
   dashboardUrl: string;
 }
 

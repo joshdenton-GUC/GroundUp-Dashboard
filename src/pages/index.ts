@@ -2,6 +2,7 @@
 export { default as HomePage } from './home/HomePage';
 export { default as AuthPage } from './auth/AuthPage';
 export { default as ResetPasswordPage } from './auth/ResetPasswordPage';
+export { SetPasswordPage } from './auth/SetPasswordPage';
 export { default as NotFoundPage } from './error/NotFoundPage';
 
 // Dashboard pages

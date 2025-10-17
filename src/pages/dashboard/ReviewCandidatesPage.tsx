@@ -17,6 +17,8 @@ import {
   GraduationCap,
   Star,
   ExternalLink,
+  MapPin,
+  Download,
 } from 'lucide-react';
 import {
   Dialog,
@@ -32,12 +34,19 @@ interface PendingCandidate {
   full_name: string;
   email: string | null;
   phone: string | null;
+  location: string | null;
   resume_url: string | null;
   skills: string[] | null;
   experience_years: string | null;
   education: string | null;
   summary: string | null;
   created_at: string;
+  job_post_id: string | null;
+  job_posts?: {
+    id: string;
+    title: string;
+    location: string;
+  } | null;
 }
 
 export default function ReviewCandidatesPage() {
@@ -68,10 +77,19 @@ export default function ReviewCandidatesPage() {
         return;
       }
 
-      // Fetch pending review candidate for this client
+      // Fetch pending review candidate for this client with job post info
       const { data, error } = await supabase
         .from('candidates')
-        .select('*')
+        .select(
+          `
+          *,
+          job_posts (
+            id,
+            title,
+            location
+          )
+        `
+        )
         .eq('client_id', client.id)
         .eq('status', 'pending_review')
         .order('created_at', { ascending: true })
@@ -217,6 +235,44 @@ export default function ReviewCandidatesPage() {
     }
   };
 
+  const handleDownloadPDF = async () => {
+    if (!pendingCandidate) return;
+
+    if (!pendingCandidate.resume_url) {
+      toast({
+        title: 'No Resume Available',
+        description: `No resume has been uploaded for ${pendingCandidate.full_name}.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      // Get the public URL from Supabase storage
+      const { data } = supabase.storage
+        .from('resumes')
+        .getPublicUrl(pendingCandidate.resume_url);
+
+      if (data?.publicUrl) {
+        // Open the resume in a new tab
+        window.open(data.publicUrl, '_blank');
+        toast({
+          title: 'Resume Opened',
+          description: `Opening resume for ${pendingCandidate.full_name}.`,
+        });
+      } else {
+        throw new Error('Could not generate resume URL');
+      }
+    } catch (error) {
+      console.error('Error opening resume:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to open resume. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -260,10 +316,30 @@ export default function ReviewCandidatesPage() {
               A new candidate has been assigned to you for review
             </p>
           </div>
-          <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
-            <AlertCircle className="w-4 h-4 mr-1" />
-            Pending Review
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={handleDownloadPDF}
+              variant="outline"
+              size="sm"
+              className="text-blue-600 border-blue-300 hover:bg-blue-50"
+              disabled={!pendingCandidate.resume_url}
+              title={
+                pendingCandidate.resume_url
+                  ? 'Download Resume'
+                  : 'No resume available'
+              }
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download Resume
+            </Button>
+            <Badge
+              variant="secondary"
+              className="bg-yellow-100 text-yellow-800"
+            >
+              <AlertCircle className="w-4 h-4 mr-1" />
+              Pending Review
+            </Badge>
+          </div>
         </div>
       </div>
 
@@ -281,6 +357,34 @@ export default function ReviewCandidatesPage() {
               {pendingCandidate.full_name}
             </h2>
           </div>
+
+          {/* Position */}
+          {pendingCandidate.job_posts && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-foreground font-medium">
+                <Briefcase className="h-5 w-5" />
+                Position
+              </div>
+              <p className="text-muted-foreground ml-7">
+                {pendingCandidate.job_posts.title}
+              </p>
+            </div>
+          )}
+
+          {/* Location */}
+          {(pendingCandidate.location ||
+            pendingCandidate.job_posts?.location) && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-foreground font-medium">
+                <MapPin className="h-5 w-5" />
+                Location
+              </div>
+              <p className="text-muted-foreground ml-7">
+                {pendingCandidate.location ||
+                  pendingCandidate.job_posts?.location}
+              </p>
+            </div>
+          )}
 
           {/* Experience */}
           {pendingCandidate.experience_years !== null && (

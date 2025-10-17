@@ -66,6 +66,7 @@ export function CandidateManager() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<
@@ -140,15 +141,22 @@ export function CandidateManager() {
     fetchCandidates();
   }, [fetchCandidates]);
 
-  const filteredCandidates = candidates.filter(
-    candidate =>
+  const filteredCandidates = candidates.filter(candidate => {
+    // Search filter
+    const matchesSearch =
       candidate.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       candidate.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       candidate.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       candidate.skills?.some(skill =>
         skill.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-  );
+      );
+
+    // Status filter
+    const matchesStatus =
+      statusFilter === 'all' || candidate.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
 
   const viewResume = async (resumeUrl: string) => {
     try {
@@ -183,7 +191,7 @@ export function CandidateManager() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {/* Search */}
+          {/* Search and Filters */}
           <div className="flex items-center space-x-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -194,6 +202,19 @@ export function CandidateManager() {
                 className="pl-10 bg-background border-border"
               />
             </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[200px] bg-background border-border">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending_review">Pending Review</SelectItem>
+                <SelectItem value="interviewing">Interviewing</SelectItem>
+                <SelectItem value="hired">Hired</SelectItem>
+                <SelectItem value="not_hired">Not Hired</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Candidates Table */}
@@ -286,13 +307,13 @@ export function CandidateManager() {
                                 <Eye className="h-4 w-4" />
                               </Button>
                             </DialogTrigger>
-                            <DialogContent className="max-w-2xl bg-card border-border">
+                            <DialogContent className="max-w-2xl bg-card border-border" >
                               <DialogHeader>
                                 <DialogTitle className="text-foreground">
                                   Candidate Details
                                 </DialogTitle>
                               </DialogHeader>
-                              <div className="space-y-4">
+                              <div className="space-y-4" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
                                 <div className="grid gap-4 md:grid-cols-2">
                                   <div>
                                     <h4 className="font-medium text-foreground">

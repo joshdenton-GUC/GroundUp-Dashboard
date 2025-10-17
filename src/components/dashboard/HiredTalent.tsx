@@ -10,16 +10,28 @@ import {
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Download } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface HiredCandidate {
   id: string;
   full_name: string;
   education: string | null;
+  location: string | null;
   updated_at: string;
+  job_post_id: string | null;
+  resume_url: string | null;
+  job_posts?: {
+    id: string;
+    title: string;
+    location: string;
+  } | null;
 }
 
 export function HiredTalent() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [hiredCandidates, setHiredCandidates] = useState<HiredCandidate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,11 +52,26 @@ export function HiredTalent() {
         if (clientError && clientError.code !== 'PGRST116') {
           console.error('Error fetching client:', clientError);
         } else if (client) {
-          // Fetch hired candidates
+          // Fetch hired candidates with job post info
           const { data: candidatesData, error: candidatesError } =
             await supabase
               .from('candidates')
-              .select('id, full_name, education, updated_at')
+              .select(
+                `
+                id, 
+                full_name, 
+                education, 
+                location,
+                updated_at,
+                job_post_id,
+                resume_url,
+                job_posts (
+                  id,
+                  title,
+                  location
+                )
+              `
+              )
               .or(`client_id.eq.${client.id},uploaded_by.eq.${user.id}`)
               .eq('status', 'hired')
               .order('updated_at', { ascending: false });
@@ -97,6 +124,62 @@ export function HiredTalent() {
     return 'Probation Complete';
   };
 
+  const getJobTitle = (candidate: HiredCandidate) => {
+    // Try to get the job title from the joined job_posts data
+    if (candidate.job_posts && candidate.job_posts.title) {
+      return candidate.job_posts.title;
+    }
+    return 'No Position Assigned';
+  };
+
+  const getLocation = (candidate: HiredCandidate) => {
+    // First try candidate's location
+    if (candidate.location) {
+      return candidate.location;
+    }
+    // Then try job post location
+    if (candidate.job_posts && candidate.job_posts.location) {
+      return candidate.job_posts.location;
+    }
+    return '-';
+  };
+
+  const handleDownloadPDF = async (candidate: HiredCandidate) => {
+    if (!candidate.resume_url) {
+      toast({
+        title: 'No Resume Available',
+        description: `No resume has been uploaded for ${candidate.full_name}.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      // Get the public URL from Supabase storage
+      const { data } = supabase.storage
+        .from('resumes')
+        .getPublicUrl(candidate.resume_url);
+
+      if (data?.publicUrl) {
+        // Open the resume in a new tab
+        window.open(data.publicUrl, '_blank');
+        toast({
+          title: 'Resume Opened',
+          description: `Opening resume for ${candidate.full_name}.`,
+        });
+      } else {
+        throw new Error('Could not generate resume URL');
+      }
+    } catch (error) {
+      console.error('Error opening resume:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to open resume. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-6">
@@ -122,6 +205,12 @@ export function HiredTalent() {
                   Candidate Name
                 </TableHead>
                 <TableHead className="font-semibold text-gray-700">
+                  Position
+                </TableHead>
+                <TableHead className="font-semibold text-gray-700">
+                  Location
+                </TableHead>
+                <TableHead className="font-semibold text-gray-700">
                   Education
                 </TableHead>
                 <TableHead className="font-semibold text-gray-700">
@@ -130,12 +219,15 @@ export function HiredTalent() {
                 <TableHead className="font-semibold text-gray-700">
                   60-Day Status
                 </TableHead>
+                <TableHead className="font-semibold text-gray-700">
+                  PDF
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <div className="flex items-center justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                       <span className="ml-2 text-gray-600">
@@ -155,6 +247,12 @@ export function HiredTalent() {
                         {candidate.full_name}
                       </TableCell>
                       <TableCell className="text-gray-700">
+                        {getJobTitle(candidate)}
+                      </TableCell>
+                      <TableCell className="text-gray-700">
+                        {getLocation(candidate)}
+                      </TableCell>
+                      <TableCell className="text-gray-700">
                         {candidate.education || '-'}
                       </TableCell>
                       <TableCell className="text-gray-700">
@@ -166,6 +264,22 @@ export function HiredTalent() {
                         )} text-nowrap`}
                       >
                         {getStatusText(daysRemaining)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          onClick={() => handleDownloadPDF(candidate)}
+                          variant="outline"
+                          size="sm"
+                          className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                          disabled={!candidate.resume_url}
+                          title={
+                            candidate.resume_url
+                              ? 'Download Resume'
+                              : 'No resume available'
+                          }
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );

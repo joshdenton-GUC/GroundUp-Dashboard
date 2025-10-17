@@ -42,7 +42,12 @@ export function generateJobStatusUpdateEmail(
               .toUpperCase()}</p>
             ${
               data.candidateName
-                ? `<p style="margin: 0; color: #374151;"><strong>Candidate:</strong> ${data.candidateName}</p>`
+                ? `<p style="margin: 0 0 10px 0; color: #374151;"><strong>Candidate:</strong> ${data.candidateName}</p>`
+                : ''
+            }
+            ${
+              data.candidateLocation
+                ? `<p style="margin: 0; color: #64748b;"><strong>Location:</strong> ${data.candidateLocation}</p>`
                 : ''
             }
           </div>

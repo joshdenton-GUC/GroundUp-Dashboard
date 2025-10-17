@@ -47,6 +47,8 @@ export type Database = {
           experience_years: string | null;
           full_name: string;
           id: string;
+          job_post_id: string | null;
+          location: string | null;
           phone: string | null;
           resume_url: string | null;
           skills: string[] | null;
@@ -63,6 +65,8 @@ export type Database = {
           experience_years?: string | null;
           full_name: string;
           id?: string;
+          job_post_id?: string | null;
+          location?: string | null;
           phone?: string | null;
           resume_url?: string | null;
           skills?: string[] | null;
@@ -79,6 +83,8 @@ export type Database = {
           experience_years?: string | null;
           full_name?: string;
           id?: string;
+          job_post_id?: string | null;
+          location?: string | null;
           phone?: string | null;
           resume_url?: string | null;
           skills?: string[] | null;
@@ -93,6 +99,13 @@ export type Database = {
             columns: ['client_id'];
             isOneToOne: false;
             referencedRelation: 'clients';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'candidates_job_post_id_fkey';
+            columns: ['job_post_id'];
+            isOneToOne: false;
+            referencedRelation: 'job_posts';
             referencedColumns: ['id'];
           },
           {

@@ -136,6 +136,16 @@ const handler = async (req: Request): Promise<Response> => {
                     emailData.candidate_name
                   }</h2>
                   ${
+                    emailData.candidate_position
+                      ? `<p style="margin: 0 0 10px 0; color: #2563eb;"><strong>Position:</strong> ${emailData.candidate_position}</p>`
+                      : ''
+                  }
+                  ${
+                    emailData.candidate_location
+                      ? `<p style="margin: 0 0 10px 0; color: #64748b;"><strong>Location:</strong> ${emailData.candidate_location}</p>`
+                      : ''
+                  }
+                  ${
                     emailData.candidate_email
                       ? `<p style="margin: 0 0 10px 0; color: #64748b;">Email: <a href="mailto:${emailData.candidate_email}" style="color: #2563eb; text-decoration: none;">${emailData.candidate_email}</a></p>`
                       : ''

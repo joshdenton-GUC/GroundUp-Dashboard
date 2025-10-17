@@ -15,6 +15,7 @@ import { ToastAction } from '@/components/ui/toast';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { Download } from 'lucide-react';
 
 export function CandidateInfo() {
   const { state } = useJobHiring();
@@ -39,6 +40,8 @@ export function CandidateInfo() {
           id,
           full_name,
           client_id,
+          job_post_id,
+          location,
           clients!inner(
             id,
             company_name,
@@ -47,6 +50,11 @@ export function CandidateInfo() {
               email,
               full_name
             )
+          ),
+          job_posts(
+            id,
+            title,
+            location
           )
         `
         )
@@ -71,9 +79,13 @@ export function CandidateInfo() {
             clientName: candidateData.clients.profiles.full_name || 'Client',
             clientEmail: candidateData.clients.profiles.email || '',
             companyName: candidateData.clients.company_name || 'Company',
-            jobTitle: 'Job Position', // We can enhance this later to get actual job title
+            jobTitle: candidateData.job_posts?.title || 'Job Position',
             jobStatus: newStatus,
             candidateName: candidateName,
+            candidateLocation:
+              candidateData.location ||
+              candidateData.job_posts?.location ||
+              null,
             dashboardUrl: `${window.location.origin}/dashboard/candidate-info`,
           },
         }
@@ -114,7 +126,12 @@ export function CandidateInfo() {
             await supabase
               .from('candidates')
               .select(
-                'id, full_name, status, created_at, uploaded_by, client_id, education, skills, summary, experience_years'
+                `id, full_name, status, created_at, uploaded_by, client_id, education, skills, summary, experience_years, location, job_post_id, resume_url,
+                job_posts (
+                  id,
+                  title,
+                  location
+                )`
               )
               .or(`client_id.eq.${client.id},uploaded_by.eq.${user.id}`)
               .not('status', 'in', '(pending_review,rejected)')
@@ -297,9 +314,65 @@ export function CandidateInfo() {
     return <Badge variant={config.variant as any}>{config.label}</Badge>;
   };
 
-  const getJobTitle = (jobId: string) => {
-    const job = state.jobs.find(j => j.id === jobId);
-    return job?.title || 'Available for Assignment';
+  const getJobTitle = (candidate: any) => {
+    // Try to get the job title from the joined job_posts data
+    if (candidate.job_posts && candidate.job_posts.title) {
+      return candidate.job_posts.title;
+    }
+    // Fallback to state.jobs if needed
+    if (candidate.job_post_id) {
+      const job = state.jobs.find(j => j.id === candidate.job_post_id);
+      return job?.title || 'Position Not Found';
+    }
+    return 'No Position Assigned';
+  };
+
+  const getLocation = (candidate: any) => {
+    // First try candidate's location
+    if (candidate.location) {
+      return candidate.location;
+    }
+    // Then try job post location
+    if (candidate.job_posts && candidate.job_posts.location) {
+      return candidate.job_posts.location;
+    }
+    return '-';
+  };
+
+  const handleDownloadPDF = async (candidate: any) => {
+    if (!candidate.resume_url) {
+      toast({
+        title: 'No Resume Available',
+        description: `No resume has been uploaded for ${candidate.full_name}.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      // Get the public URL from Supabase storage
+      const { data } = supabase.storage
+        .from('resumes')
+        .getPublicUrl(candidate.resume_url);
+
+      if (data?.publicUrl) {
+        // Open the resume in a new tab
+        window.open(data.publicUrl, '_blank');
+        toast({
+          title: 'Resume Opened',
+          description: `Opening resume for ${candidate.full_name}.`,
+        });
+      } else {
+        throw new Error('Could not generate resume URL');
+      }
+    } catch (error) {
+      console.error('Error opening resume:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to open resume. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -342,6 +415,9 @@ export function CandidateInfo() {
                   Status
                 </TableHead>
                 <TableHead className="font-semibold text-gray-700">
+                  PDF
+                </TableHead>
+                <TableHead className="font-semibold text-gray-700">
                   Actions
                 </TableHead>
               </TableRow>
@@ -349,7 +425,7 @@ export function CandidateInfo() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={8} className="text-center py-8">
                     <div className="flex items-center justify-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                       <span className="ml-2 text-gray-600">
@@ -365,9 +441,11 @@ export function CandidateInfo() {
                       {candidate.full_name}
                     </TableCell>
                     <TableCell className="text-gray-700">
-                      {getJobTitle(candidate.jobId || '')}
+                      {getJobTitle(candidate)}
                     </TableCell>
-                    <TableCell className="text-gray-700">-</TableCell>
+                    <TableCell className="text-gray-700">
+                      {getLocation(candidate)}
+                    </TableCell>
                     <TableCell className="text-gray-700">
                       {candidate.uploaded_by === user?.id ? (
                         <Badge variant="secondary">You Uploaded</Badge>
@@ -379,6 +457,22 @@ export function CandidateInfo() {
                       {new Date(candidate.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell>{getStatusBadge(candidate.status)}</TableCell>
+                    <TableCell>
+                      <Button
+                        onClick={() => handleDownloadPDF(candidate)}
+                        variant="outline"
+                        size="sm"
+                        className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                        disabled={!candidate.resume_url}
+                        title={
+                          candidate.resume_url
+                            ? 'Download Resume'
+                            : 'No resume available'
+                        }
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
                         {candidate.status !== 'hired' &&
@@ -402,7 +496,7 @@ export function CandidateInfo() {
                                 onClick={() =>
                                   handleHire(
                                     candidate.id,
-                                    candidate.jobId || '',
+                                    candidate.job_post_id || '',
                                     candidate.full_name
                                   )
                                 }

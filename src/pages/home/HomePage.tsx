@@ -15,11 +15,23 @@ const HomePage = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
 
-  // Redirect authenticated users to dashboard
+  // Check if user needs to set password (invited user) or redirect to dashboard
   useEffect(() => {
-    if (!loading && user) {
-      navigate('/dashboard');
-    }
+    const checkUserStatus = async () => {
+      if (!loading && user) {
+        // Check if user was invited and hasn't set password yet
+        if (!user.user_metadata?.password_set) {
+          console.log('[HomePage] User needs to set password, redirecting...');
+          navigate('/auth/set-password');
+          return;
+        }
+
+        // Otherwise redirect to dashboard as normal
+        navigate('/dashboard');
+      }
+    };
+
+    checkUserStatus();
   }, [user, loading, navigate]);
 
   return (

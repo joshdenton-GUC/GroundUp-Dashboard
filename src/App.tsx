@@ -21,6 +21,7 @@ import {
   CompanyProfilePage,
   HowToPage,
   NotFoundPage,
+  SetPasswordPage,
 } from './pages';
 import PaymentSuccessPage from './pages/dashboard/PaymentSuccessPage';
 import AuthCallbackPage from './pages/auth/AuthCallbackPage';
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/" element={<HomePage />} />
               <Route path="/auth" element={<AuthPage />} />
               <Route path="/auth/callback" element={<AuthCallbackPage />} />
+              <Route path="/auth/set-password" element={<SetPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route
                 path="/dashboard"

@@ -32,6 +32,8 @@ interface NotifyClientRequest {
   candidateSkills?: string[];
   candidateSummary?: string;
   candidateEducation?: string;
+  candidateLocation?: string;
+  candidatePosition?: string;
   clientEmails?: string[];
   candidateId?: string;
   clientId?: string;
@@ -75,6 +77,8 @@ const handler = async (req: Request): Promise<Response> => {
       candidateSkills,
       candidateSummary,
       candidateEducation,
+      candidateLocation,
+      candidatePosition,
       clientEmails,
       candidateId,
       clientId,
@@ -136,6 +140,16 @@ const handler = async (req: Request): Promise<Response> => {
             <!-- Candidate Information -->
             <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
               <h2 style="margin: 0 0 10px 0; color: #1e293b; font-size: 20px; font-weight: bold;">${candidateName}</h2>
+              ${
+                candidatePosition
+                  ? `<p style="margin: 0 0 10px 0; color: #2563eb;"><strong>Position:</strong> ${candidatePosition}</p>`
+                  : ''
+              }
+              ${
+                candidateLocation
+                  ? `<p style="margin: 0 0 10px 0; color: #64748b;"><strong>Location:</strong> ${candidateLocation}</p>`
+                  : ''
+              }
               ${
                 candidateEducation
                   ? `<p style="margin: 0 0 10px 0; color: #64748b;"><strong>Education:</strong> ${candidateEducation}</p>`

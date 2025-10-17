@@ -7,6 +7,7 @@ import { CandidateManager } from './CandidateManager';
 import { ClientManager } from './ClientManager';
 import { EmailAlertsManager } from './EmailAlertsManager';
 import { SecurityAuditLog } from './SecurityAuditLog';
+import { AddClientDialog } from './AddClientDialog';
 import {
   Upload,
   Users,
@@ -181,10 +182,19 @@ export function AdminDashboard() {
         });
       }
 
-      // Fetch recent staged jobs (draft status)
+      // Fetch recent staged jobs (draft status) with client info
       const { data: stagedJobs, error: stagedError } = await supabase
         .from('job_posts')
-        .select('id, title, created_at, status')
+        .select(
+          `
+          id, 
+          title, 
+          created_at, 
+          status,
+          client_id,
+          clients(company_name)
+        `
+        )
         .eq('status', 'draft')
         .order('created_at', { ascending: false })
         .limit(10);
@@ -192,21 +202,32 @@ export function AdminDashboard() {
       if (stagedError) throw stagedError;
 
       if (stagedJobs) {
-        stagedJobs.forEach(job => {
+        stagedJobs.forEach((job: any) => {
+          const clientName = job.clients?.company_name || 'Unknown Client';
           allActivities.push({
             id: `staged-${job.id}`,
             type: 'job_staged',
-            description: `Job staged: ${job.title}`,
+            description: `Job staged by ${clientName}: ${job.title}`,
             timestamp: job.created_at,
             icon: <Briefcase className="h-4 w-4 text-blue-600" />,
           });
         });
       }
 
-      // Fetch recent paid jobs
+      // Fetch recent paid jobs with client info
       const { data: paidJobs, error: paidError } = await supabase
         .from('job_posts')
-        .select('id, title, created_at, payment_status, posted_at')
+        .select(
+          `
+          id, 
+          title, 
+          created_at, 
+          payment_status, 
+          posted_at,
+          client_id,
+          clients(company_name)
+        `
+        )
         .eq('payment_status', 'completed')
         .order('posted_at', { ascending: false })
         .limit(10);
@@ -214,11 +235,12 @@ export function AdminDashboard() {
       if (paidError) throw paidError;
 
       if (paidJobs) {
-        paidJobs.forEach(job => {
+        paidJobs.forEach((job: any) => {
+          const clientName = job.clients?.company_name || 'Unknown Client';
           allActivities.push({
             id: `paid-${job.id}`,
             type: 'job_paid',
-            description: `Job posted (paid): ${job.title}`,
+            description: `Job posted by ${clientName}: ${job.title}`,
             timestamp: job.posted_at || job.created_at,
             icon: <DollarSign className="h-4 w-4 text-emerald-600" />,
           });
@@ -343,14 +365,18 @@ export function AdminDashboard() {
                   <Upload className="mr-2 h-4 w-4" />
                   Upload New Resume
                 </Button>
-                <Button
-                  onClick={() => setActiveTab('clients')}
-                  className="w-full justify-start"
-                  variant="outline"
-                >
-                  <Building2 className="mr-2 h-4 w-4" />
-                  Add New Client
-                </Button>
+                <AddClientDialog
+                  trigger={
+                    <Button className="w-full justify-start" variant="outline">
+                      <Building2 className="mr-2 h-4 w-4" />
+                      Add New Client
+                    </Button>
+                  }
+                  onSuccess={() => {
+                    // Refresh metrics when a new client is added
+                    fetchDashboardMetrics();
+                  }}
+                />
               </CardContent>
             </Card>
           </div>

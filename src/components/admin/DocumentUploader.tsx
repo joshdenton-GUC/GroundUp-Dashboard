@@ -20,11 +20,13 @@ interface CandidateFormData {
   full_name: string;
   email: string;
   phone: string;
+  location: string;
   skills: string;
   experience_years: string;
   education: string;
   summary: string;
   selectedClient: string;
+  selectedJobPost: string;
 }
 
 interface Client {
@@ -32,6 +34,14 @@ interface Client {
   company_name: string;
   user_id: string;
   email?: string;
+}
+
+interface JobPost {
+  id: string;
+  title: string;
+  location: string;
+  status: string;
+  payment_status: string;
 }
 
 export function DocumentUploader() {
@@ -44,14 +54,18 @@ export function DocumentUploader() {
     full_name: '',
     email: '',
     phone: '',
+    location: '',
     skills: '',
     experience_years: '',
     education: '',
     summary: '',
     selectedClient: '',
+    selectedJobPost: '',
   });
   const [clients, setClients] = useState<Client[]>([]);
+  const [jobPosts, setJobPosts] = useState<JobPost[]>([]);
   const [loadingClients, setLoadingClients] = useState(false);
+  const [loadingJobPosts, setLoadingJobPosts] = useState(false);
   const [resumeParsed, setResumeParsed] = useState(false);
   const [clientsWithPendingReview, setClientsWithPendingReview] = useState<
     Set<string>
@@ -105,6 +119,46 @@ export function DocumentUploader() {
   useEffect(() => {
     fetchClients();
   }, [fetchClients]);
+
+  // Fetch job posts when client is selected
+  const fetchJobPosts = useCallback(
+    async (clientId: string) => {
+      try {
+        setLoadingJobPosts(true);
+        const { data, error } = await supabase
+          .from('job_posts')
+          .select('id, title, location, status, payment_status')
+          .eq('client_id', clientId)
+          .eq('status', 'posted') // Only show active/posted jobs
+          .eq('payment_status', 'completed') // Only show paid jobs
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        setJobPosts(data || []);
+      } catch (error) {
+        console.error('Error fetching job posts:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load job posts for this client',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoadingJobPosts(false);
+      }
+    },
+    [toast]
+  );
+
+  // Fetch job posts when client is selected
+  useEffect(() => {
+    if (formData.selectedClient) {
+      fetchJobPosts(formData.selectedClient);
+    } else {
+      setJobPosts([]);
+      setFormData(prev => ({ ...prev, selectedJobPost: '' }));
+    }
+  }, [formData.selectedClient, fetchJobPosts]);
 
   const parseResume = useCallback(
     async (resumePath: string) => {
@@ -219,6 +273,7 @@ export function DocumentUploader() {
           full_name: candidateInfo.full_name || prev.full_name,
           email: candidateInfo.email || prev.email,
           phone: candidateInfo.phone || prev.phone,
+          location: candidateInfo.location || prev.location,
           skills: Array.isArray(candidateInfo.skills)
             ? candidateInfo.skills.join(', ')
             : candidateInfo.skills || prev.skills,
@@ -374,7 +429,13 @@ export function DocumentUploader() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !selectedFile || !formData.selectedClient) return;
+    if (
+      !user ||
+      !selectedFile ||
+      !formData.selectedClient ||
+      !formData.selectedJobPost
+    )
+      return;
 
     // Check if selected client has a pending review
     if (clientsWithPendingReview.has(formData.selectedClient)) {
@@ -408,6 +469,7 @@ export function DocumentUploader() {
           full_name: formData.full_name,
           email: formData.email,
           phone: formData.phone,
+          location: formData.location || null,
           resume_url: resumeUrl,
           skills: skillsArray,
           experience_years: formData.experience_years || null,
@@ -415,6 +477,7 @@ export function DocumentUploader() {
           summary: formData.summary,
           uploaded_by: user.id,
           client_id: formData.selectedClient,
+          job_post_id: formData.selectedJobPost || null,
           status: 'pending_review',
         })
         .select()
@@ -443,6 +506,11 @@ export function DocumentUploader() {
         }
       }
 
+      // Get job post details for email
+      const selectedJob = jobPosts.find(
+        jp => jp.id === formData.selectedJobPost
+      );
+
       // Send targeted email notification to the selected client
       try {
         const { data, error } = await supabase.functions.invoke(
@@ -453,6 +521,9 @@ export function DocumentUploader() {
               candidateEmail: formData.email,
               candidateSkills: skillsArray,
               candidateSummary: formData.summary,
+              candidateLocation:
+                formData.location || selectedJob?.location || null,
+              candidatePosition: selectedJob?.title || null,
               clientEmails: clientUserEmail ? [clientUserEmail] : [],
               candidateId: candidateData.id,
               clientId: selectedClient.id,
@@ -471,9 +542,18 @@ export function DocumentUploader() {
         // Don't fail the entire operation if email fails
       }
 
+      // Get selected job post title for success message
+      const selectedJobPost = jobPosts.find(
+        jp => jp.id === formData.selectedJobPost
+      );
+
       toast({
         title: 'Success',
-        description: `Candidate uploaded successfully and assigned to ${selectedClient?.company_name}. Client has been notified!`,
+        description: `Candidate uploaded successfully and assigned to ${
+          selectedClient?.company_name
+        } for the position: ${
+          selectedJobPost?.title || 'Job Position'
+        }. Client has been notified!`,
       });
 
       // Refresh clients to update pending review list
@@ -484,11 +564,13 @@ export function DocumentUploader() {
         full_name: '',
         email: '',
         phone: '',
+        location: '',
         skills: '',
         experience_years: '',
         education: '',
         summary: '',
         selectedClient: '',
+        selectedJobPost: '',
       });
       setSelectedFile(null);
       setResumeParsed(false);
@@ -512,11 +594,13 @@ export function DocumentUploader() {
       full_name: '',
       email: '',
       phone: '',
+      location: '',
       skills: '',
       experience_years: '',
       education: '',
       summary: '',
       selectedClient: formData.selectedClient, // Keep client selection
+      selectedJobPost: formData.selectedJobPost, // Keep job post selection
     });
   };
 
@@ -685,6 +769,87 @@ export function DocumentUploader() {
             )}
           </div>
 
+          {/* Job Position Selection */}
+          {formData.selectedClient && (
+            <div className="space-y-2">
+              <Label htmlFor="job-post-selection" className="text-foreground">
+                Select Job Position *
+              </Label>
+              <Select
+                value={formData.selectedJobPost}
+                onValueChange={value =>
+                  setFormData(prev => ({ ...prev, selectedJobPost: value }))
+                }
+                disabled={loadingJobPosts || jobPosts.length === 0}
+              >
+                <SelectTrigger className="bg-background border-border">
+                  <SelectValue
+                    placeholder={
+                      loadingJobPosts
+                        ? 'Loading job positions...'
+                        : jobPosts.length === 0
+                        ? 'No job positions available'
+                        : 'Select a job position'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {jobPosts.map(job => (
+                    <SelectItem key={job.id} value={job.id}>
+                      <div className="flex flex-col text-start">
+                        <span className="font-medium">{job.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {job.location} • Posted
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {jobPosts.length === 0 && !loadingJobPosts && (
+                <p className="text-sm text-yellow-600">
+                  ⚠️ This client has no active posted jobs. Only paid and
+                  published jobs are available for candidate assignment.
+                </p>
+              )}
+              {formData.selectedJobPost && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-green-800">
+                    <svg
+                      className="h-4 w-4"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">
+                        Position:{' '}
+                        {
+                          jobPosts.find(
+                            jp => jp.id === formData.selectedJobPost
+                          )?.title
+                        }
+                      </span>
+                      <span className="text-xs text-green-700">
+                        Location:{' '}
+                        {
+                          jobPosts.find(
+                            jp => jp.id === formData.selectedJobPost
+                          )?.location
+                        }
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Candidate Information - Only show after resume is parsed */}
           {resumeParsed && (
             <div className="space-y-6">
@@ -751,6 +916,19 @@ export function DocumentUploader() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label htmlFor="location" className="text-foreground">
+                    Location
+                  </Label>
+                  <Input
+                    id="location"
+                    value={formData.location}
+                    disabled
+                    placeholder="Not available"
+                    className="bg-muted border-border text-muted-foreground"
+                  />
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="experience_years" className="text-foreground">
                     Years of Experience
                   </Label>
@@ -811,27 +989,15 @@ export function DocumentUploader() {
                 {formData.summary && formData.summary.includes('•') ? (
                   <div className="bg-muted border border-border rounded-md p-3 min-h-[100px]">
                     <ul className="space-y-2 text-muted-foreground">
-                      {formData.summary.split('\n').map((line, index) => {
-                        const trimmedLine = line.trim();
-                        if (trimmedLine.startsWith('•')) {
-                          return (
-                            <li key={index} className="flex gap-2">
-                              <span className="text-primary font-bold">•</span>
-                              <span className="flex-1">
-                                {trimmedLine.substring(1).trim()}
-                              </span>
-                            </li>
-                          );
-                        } else if (trimmedLine) {
-                          return (
-                            <li key={index} className="flex gap-2">
-                              <span className="text-primary font-bold">•</span>
-                              <span className="flex-1">{trimmedLine}</span>
-                            </li>
-                          );
-                        }
-                        return null;
-                      })}
+                      {formData.summary
+                        .split(/•/)
+                        .filter(item => item.trim())
+                        .map((item, index) => (
+                          <li key={index} className="flex gap-2">
+                            <span className="text-primary font-bold">•</span>
+                            <span className="flex-1">{item.trim()}</span>
+                          </li>
+                        ))}
                     </ul>
                   </div>
                 ) : (
@@ -878,24 +1044,26 @@ export function DocumentUploader() {
             </div>
           )}
 
-          {/* Submit Button - Only show when resume is parsed and client is selected */}
-          {resumeParsed && formData.selectedClient && (
-            <div className="flex justify-end">
-              <Button
-                type="submit"
-                disabled={
-                  uploading || parsing || !selectedFile || !formData.full_name
-                }
-                className="w-fit"
-              >
-                {uploading
-                  ? 'Uploading...'
-                  : parsing
-                  ? 'Parsing Resume...'
-                  : 'Upload Candidate'}
-              </Button>
-            </div>
-          )}
+          {/* Submit Button - Only show when resume is parsed, client and job are selected */}
+          {resumeParsed &&
+            formData.selectedClient &&
+            formData.selectedJobPost && (
+              <div className="flex justify-end">
+                <Button
+                  type="submit"
+                  disabled={
+                    uploading || parsing || !selectedFile || !formData.full_name
+                  }
+                  className="w-fit"
+                >
+                  {uploading
+                    ? 'Uploading...'
+                    : parsing
+                    ? 'Parsing Resume...'
+                    : 'Upload Candidate'}
+                </Button>
+              </div>
+            )}
 
           {/* Show message when conditions are not met */}
           {!resumeParsed && (
@@ -945,6 +1113,31 @@ export function DocumentUploader() {
               </p>
             </div>
           )}
+
+          {resumeParsed &&
+            formData.selectedClient &&
+            !formData.selectedJobPost && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-yellow-800">
+                  <svg
+                    className="h-5 w-5"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span className="font-medium">Select a Job Position</span>
+                </div>
+                <p className="text-yellow-700 text-sm mt-1">
+                  Please select a job position to assign this candidate to
+                  before uploading.
+                </p>
+              </div>
+            )}
         </form>
       </CardContent>
     </Card>

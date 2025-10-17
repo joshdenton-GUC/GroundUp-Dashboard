@@ -11,6 +11,13 @@ const AuthCallbackPage = () => {
   const handleAuthentication = async () => {
     if (!user || !profile) return;
 
+    // Check if user needs to set password (invited user)
+    if (!user.user_metadata?.password_set) {
+      console.log('[AuthCallback] User needs to set password, redirecting...');
+      navigate('/auth/set-password');
+      return;
+    }
+
     // Trigger client registration email alert for new clients
     if (profile.role === 'client' && !emailAlertSent) {
       await triggerClientRegistrationEmail(user.id);

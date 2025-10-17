@@ -2,6 +2,7 @@ export interface CandidateInfo {
   full_name: string;
   email: string;
   phone: string;
+  location: string;
   skills: string[];
   experience_years: string; // One of: "0", "2", "4", "7", "10"
   education: string;

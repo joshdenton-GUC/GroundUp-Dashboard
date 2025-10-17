@@ -9,6 +9,10 @@ function getGeminiResponseSchema() {
       full_name: { type: 'string' },
       email: { type: 'string' },
       phone: { type: 'string' },
+      location: {
+        type: 'string',
+        description: 'City and state/country of the candidate',
+      },
       skills: {
         type: 'array',
         items: { type: 'string' },
@@ -55,6 +59,7 @@ function getGeminiResponseSchema() {
       'full_name',
       'email',
       'phone',
+      'location',
       'skills',
       'experience_years',
       'education',
@@ -405,6 +410,7 @@ function transformToCandidateInfo(finalData: any): CandidateInfo {
       ? finalData.email.trim()
       : basicContactInfo.email || '',
     phone: finalData.phone?.trim() || basicContactInfo.phone || '',
+    location: finalData.location?.trim() || '',
     skills: Array.isArray(finalData.skills)
       ? finalData.skills
           .filter(
@@ -506,9 +512,10 @@ CRITICAL INSTRUCTIONS:
    Return ONLY one of these exact string values: "0", "2", "4", "7", or "10"
    
 2. SKILLS: Extract EVERY technical and professional skill mentioned anywhere in the document.
-3. CONTACT INFO: Extract email and phone from header/footer/body.
-4. EDUCATION: List ALL educational qualifications in order.
-5. SUMMARY: Please output the Professional Summary section as three bullet points, each summarizing one of the last 3 job experiences from the Resume. Format each bullet point starting with "• " (bullet character followed by space). If there are fewer than 3 job experiences, provide bullet points for however many are available and if there are no job experiences, provide a bullet point for the professional summary.For example,
+3. CONTACT INFO: Extract email, phone, and location (city, state/country) from header/footer/body.
+4. LOCATION: Extract the candidate's location (city and state/country). Look for address, location, or city information typically found near contact details.
+5. EDUCATION: List ALL educational qualifications in order.
+6. SUMMARY: Please output the Professional Summary section as three bullet points, each summarizing one of the last 3 job experiences from the Resume. Format each bullet point starting with "• " (bullet character followed by space). If there are fewer than 3 job experiences, provide bullet points for however many are available and if there are no job experiences, provide a bullet point for the professional summary.For example,
 • Point number 1
 • Point number 2
 • Point number 3
