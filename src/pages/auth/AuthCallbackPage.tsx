@@ -1,32 +1,23 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
 const AuthCallbackPage = () => {
   const { user, profile, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [emailAlertSent, setEmailAlertSent] = useState(false);
 
-  const handleAuthentication = async () => {
-    if (!user || !profile) return;
-
-    // Check if user needs to set password (invited user)
-    if (!user.user_metadata?.password_set) {
-      console.log('[AuthCallback] User needs to set password, redirecting...');
-      navigate('/auth/set-password');
-      return;
+  const redirectUser = useCallback(() => {
+    // Redirect based on user role
+    if (profile?.role === 'admin') {
+      navigate('/dashboard');
+    } else {
+      // Default redirect for regular users
+      navigate('/post-new-job');
     }
-
-    // Trigger client registration email alert for new clients
-    if (profile.role === 'client' && !emailAlertSent) {
-      await triggerClientRegistrationEmail(user.id);
-      setEmailAlertSent(true);
-    }
-
-    // Redirect user based on their role
-    redirectUser();
-  };
+  }, [profile, navigate]);
 
   const triggerClientRegistrationEmail = async (userId: string) => {
     try {
@@ -122,15 +113,31 @@ const AuthCallbackPage = () => {
     }
   };
 
-  const redirectUser = () => {
-    // Redirect based on user role
-    if (profile?.role === 'admin') {
-      navigate('/dashboard');
-    } else {
-      // Default redirect for regular users
-      navigate('/post-new-job');
+  const handleAuthentication = useCallback(async () => {
+    if (!user || !profile) return;
+
+    // Get URL parameters to check if this is an invite flow
+    const searchParams = new URLSearchParams(location.search);
+    const inviteType = searchParams.get('type');
+
+    // Only check password_set for invite flows, not regular signups
+    if (inviteType === 'invite' && !user.user_metadata?.password_set) {
+      console.log(
+        '[AuthCallback] Invited user needs to set password, redirecting...'
+      );
+      navigate('/auth/set-password');
+      return;
     }
-  };
+
+    // Trigger client registration email alert for new clients
+    if (profile.role === 'client' && !emailAlertSent) {
+      await triggerClientRegistrationEmail(user.id);
+      setEmailAlertSent(true);
+    }
+
+    // Redirect user based on their role
+    redirectUser();
+  }, [user, profile, navigate, location.search, emailAlertSent, redirectUser]);
 
   useEffect(() => {
     // If user is not authenticated, redirect to home
@@ -144,7 +151,7 @@ const AuthCallbackPage = () => {
     if (!loading && user && profile) {
       handleAuthentication();
     }
-  }, [user, profile, loading, emailAlertSent]);
+  }, [user, profile, loading, emailAlertSent, handleAuthentication]);
 
   if (loading) {
     return (
